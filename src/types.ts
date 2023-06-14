@@ -1,5 +1,3 @@
-import { Block, GetLogsReturnType } from "viem";
+import { Block, Log } from "viem";
 
-type EventWithInvalid = GetLogsReturnType[number] & { invalid: boolean };
-
-export type BlockWithEvents = Block & { events: EventWithInvalid[] };
+export type BlockWithEvents = Block & { events: Log[] };
