@@ -9,6 +9,7 @@ import {
 } from "viem";
 
 import { BlockWithEvents } from "./types.js";
+import { isMatchedLogInBloomFilter } from "./bloom.js";
 
 interface Filter {
   address?: Address[];
@@ -53,10 +54,8 @@ export class ReorgFilterProvider {
   public blockFirst = -1;
   public blockHead = -1;
 
-  public filterChangesMap: Map<
-    number,
-    { blockHash?: string; filters?: Filter }
-  > = new Map();
+  public filterChangesMap: Map<number, { filters?: Filter; newEvents: Log[] }> =
+    new Map();
 
   constructor(
     rpcUrl: string,
@@ -74,8 +73,8 @@ export class ReorgFilterProvider {
   public createFilter(args?: Filter): number {
     const id = this.filterChangesMap.size;
     this.filterChangesMap.set(id, {
-      blockHash: this.numberMap.get(this.blockHead)?.canon.hash ?? undefined,
       filters: args,
+      newEvents: [],
     });
     return id;
   }
@@ -84,34 +83,14 @@ export class ReorgFilterProvider {
     if (!this.filterChangesMap.has(id))
       throw new Error(`Filter ${id} not found`);
 
-    // Return all events *after* this block hash
-    const { blockHash: prevBlockHash, filters } =
-      this.filterChangesMap.get(id)!;
-
-    let prevBlockNumber = 0;
-
-    if (prevBlockHash) {
-      prevBlockNumber = Number(this.hashMap.get(prevBlockHash)!.number!);
-    }
-
-    const allBlocks = Array.from(this.numberMap.entries())
-      .filter(([blockNumber]) => blockNumber > prevBlockNumber)
-      .reduce((acc, [_, { canon, forked }]) => {
-        acc.push(canon, ...forked);
-        return acc;
-      }, [] as BlockWithEvents[]);
-
-    const allLogs = allBlocks.reduce((acc, block) => {
-      acc.push(...block.events);
-      return acc;
-    }, [] as Log[]);
+    const { filters, newEvents } = this.filterChangesMap.get(id)!;
 
     this.filterChangesMap.set(id, {
-      blockHash: this.numberMap.get(this.blockHead)?.canon.hash ?? undefined,
       filters,
+      newEvents: [],
     });
 
-    return filters ? filterLogs(allLogs, filters) : allLogs;
+    return newEvents;
   }
 
   private detectReorg = async (block: Block) => {
@@ -163,7 +142,24 @@ export class ReorgFilterProvider {
     return blockWithEvents;
   };
 
-  private onBlock = async (block: Block) => {
+  private handleEventChanges = async (block: BlockWithEvents) => {
+    for (const { filters, newEvents } of this.filterChangesMap.values()) {
+      if (
+        !filters ||
+        isMatchedLogInBloomFilter({
+          bloom: block.logsBloom!,
+          logFilters: [filters],
+        })
+      ) {
+        if (filters) {
+          newEvents.push(...filterLogs(block.events, filters));
+        }
+        newEvents.push(...block.events);
+      }
+    }
+  };
+
+  public onBlock = async (block: Block) => {
     // Pending
     if (!block.hash || !block.number) return;
 
@@ -207,6 +203,7 @@ export class ReorgFilterProvider {
       await this.handleReorg(blockWithEvents);
     }
 
+    // Recursively backfill missing blocks
     if (block.number > this.blockFirst) {
       if (!this.numberMap.has(Number(block.number) - 1)) {
         await this.onBlock(
@@ -214,5 +211,7 @@ export class ReorgFilterProvider {
         );
       }
     }
+
+    this.handleEventChanges(blockWithEvents);
   };
 }
