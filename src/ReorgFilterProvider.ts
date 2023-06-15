@@ -50,7 +50,8 @@ export class ReorgFilterProvider {
     { canon: BlockWithEvents; forked: BlockWithEvents[] }
   > = new Map();
 
-  public blockHead = 0;
+  public blockFirst = -1;
+  public blockHead = -1;
 
   public filterChangesMap: Map<
     number,
@@ -198,8 +199,20 @@ export class ReorgFilterProvider {
       this.blockHead = Number(block.number);
     }
 
+    if (this.blockFirst === -1) {
+      this.blockFirst = Number(block.number);
+    }
+
     if (await this.detectReorg(block)) {
       await this.handleReorg(blockWithEvents);
+    }
+
+    if (block.number > this.blockFirst) {
+      if (!this.numberMap.has(Number(block.number) - 1)) {
+        await this.onBlock(
+          await this.client.getBlock({ blockNumber: block.number - 1n })
+        );
+      }
     }
   };
 }
