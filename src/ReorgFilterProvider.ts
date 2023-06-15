@@ -67,7 +67,12 @@ export class ReorgFilterProvider {
       transport: http(rpcUrl),
     });
 
-    this.unwatch = this.client.watchBlocks({ onBlock: this.onBlock });
+    this.unwatch = this.client.watchBlocks({
+      onBlock: (block) => {
+        console.log("block");
+        this.onBlock(block);
+      },
+    });
   }
 
   public createFilter(args?: Filter): number {
@@ -142,7 +147,7 @@ export class ReorgFilterProvider {
     return blockWithEvents;
   };
 
-  private handleEventChanges = async (block: BlockWithEvents) => {
+  private handleEventChanges = (block: BlockWithEvents) => {
     for (const { filters, newEvents } of this.filterChangesMap.values()) {
       if (
         !filters ||
