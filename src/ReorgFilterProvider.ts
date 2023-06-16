@@ -12,7 +12,7 @@ import { BlockWithEvents } from "./types.js";
 import { isMatchedLogInBloomFilter } from "./bloom.js";
 
 interface Filter {
-  address?: Address[];
+  address?: Address | Address[];
   topics?: Address[];
   fromBlock?: number;
   toBlock?: number;
@@ -46,15 +46,12 @@ export class ReorgFilterProvider {
   public filters;
 
   public hashMap: Map<string, BlockWithEvents> = new Map();
-  public numberMap: Map<
-    number,
-    { canon: BlockWithEvents; forked: BlockWithEvents[] }
-  > = new Map();
+  public numberMap: Map<number, BlockWithEvents> = new Map();
 
   public blockFirst = -1;
   public blockHead = -1;
 
-  public filterChangesMap: Map<number, { filters?: Filter; newEvents: Log[] }> =
+  public filterChangesMap: Map<number, { filters?: Filter; newLogs: Log[] }> =
     new Map();
 
   constructor(
@@ -68,10 +65,7 @@ export class ReorgFilterProvider {
     });
 
     this.unwatch = this.client.watchBlocks({
-      onBlock: (block) => {
-        console.log("block");
-        this.onBlock(block);
-      },
+      onBlock: (block) => this.onBlock(block),
     });
   }
 
@@ -79,7 +73,7 @@ export class ReorgFilterProvider {
     const id = this.filterChangesMap.size;
     this.filterChangesMap.set(id, {
       filters: args,
-      newEvents: [],
+      newLogs: [],
     });
     return id;
   }
@@ -88,14 +82,14 @@ export class ReorgFilterProvider {
     if (!this.filterChangesMap.has(id))
       throw new Error(`Filter ${id} not found`);
 
-    const { filters, newEvents } = this.filterChangesMap.get(id)!;
+    const { filters, newLogs } = this.filterChangesMap.get(id)!;
 
     this.filterChangesMap.set(id, {
       filters,
-      newEvents: [],
+      newLogs: [],
     });
 
-    return newEvents;
+    return newLogs;
   }
 
   private detectReorg = async (block: Block) => {
@@ -104,17 +98,17 @@ export class ReorgFilterProvider {
 
     // First block
     if (this.numberMap.size < 2) return false;
+    if (this.blockFirst >= block.number) return false;
 
-    const prevBlock = this.numberMap.get(Number(block.number) - 1);
+    let prevBlock = this.numberMap.get(Number(block.number) - 1);
 
-    if (!prevBlock?.canon.hash) {
-      await this.onBlock(
+    if (!prevBlock?.hash) {
+      prevBlock = await this.onBlock(
         await this.client.getBlock({ blockNumber: block.number - 1n })
       );
-      return false;
     }
 
-    if (prevBlock.canon.hash === block.parentHash) return false;
+    if (prevBlock!.hash === block.parentHash) return false;
 
     return true;
   };
@@ -123,32 +117,23 @@ export class ReorgFilterProvider {
     // Shoudldn't happen
     if (!block.hash || !block.number) return;
 
-    const prevBlock = this.numberMap.get(Number(block.number) - 1)!.canon;
+    const prevBlock = this.numberMap.get(Number(block.number) - 1)!;
+
     prevBlock.events = prevBlock.events.map((event) => ({
       ...event,
       removed: true,
     }));
     this.hashMap.set(prevBlock.hash!, prevBlock);
 
-    await this.onBlock(await this.getBlockByHashWithEvents(block.parentHash));
-  };
+    this.handleEventChanges(prevBlock);
 
-  private getBlockByHashWithEvents = async (blockHash: `0x${string}`) => {
-    const [events, block] = await Promise.all([
-      this.client.getLogs({ ...this.filters, blockHash }),
-      this.client.getBlock({ blockHash }),
-    ]);
-
-    const blockWithEvents: BlockWithEvents = {
-      ...block,
-      events: events.map((event) => ({ ...event, removed: false })),
-    };
-
-    return blockWithEvents;
+    await this.onBlock(
+      await this.client.getBlock({ blockNumber: block.number - 1n })
+    );
   };
 
   private handleEventChanges = (block: BlockWithEvents) => {
-    for (const { filters, newEvents } of this.filterChangesMap.values()) {
+    for (const { filters, newLogs } of this.filterChangesMap.values()) {
       if (
         !filters ||
         isMatchedLogInBloomFilter({
@@ -156,10 +141,8 @@ export class ReorgFilterProvider {
           logFilters: [filters],
         })
       ) {
-        if (filters) {
-          newEvents.push(...filterLogs(block.events, filters));
-        }
-        newEvents.push(...block.events);
+        const logs = filters ? filterLogs(block.events, filters) : block.events;
+        newLogs.push(...logs);
       }
     }
   };
@@ -169,32 +152,14 @@ export class ReorgFilterProvider {
     if (!block.hash || !block.number) return;
 
     const events = await this.client.getLogs({
-      blockHash: block.hash,
       ...this.filters,
+      blockHash: block.hash,
     });
 
     const blockWithEvents: BlockWithEvents = {
       ...block,
       events: events.map((event) => ({ ...event, removed: false })),
     };
-
-    this.hashMap.set(block.hash, blockWithEvents);
-
-    if (!this.numberMap.has(Number(block.number))) {
-      this.numberMap.set(Number(block.number), {
-        canon: blockWithEvents,
-        forked: [],
-      });
-    } else {
-      // Presume that new block is the canonical one
-      this.numberMap.set(Number(block.number), {
-        canon: blockWithEvents,
-        forked: [
-          ...this.numberMap.get(Number(block.number))!.forked,
-          this.numberMap.get(Number(block.number))!.canon,
-        ],
-      });
-    }
 
     if (this.blockHead < Number(block.number)) {
       this.blockHead = Number(block.number);
@@ -203,6 +168,9 @@ export class ReorgFilterProvider {
     if (this.blockFirst === -1) {
       this.blockFirst = Number(block.number);
     }
+
+    this.hashMap.set(block.hash, blockWithEvents);
+    this.numberMap.set(Number(block.number), blockWithEvents);
 
     if (await this.detectReorg(block)) {
       await this.handleReorg(blockWithEvents);
@@ -218,5 +186,7 @@ export class ReorgFilterProvider {
     }
 
     this.handleEventChanges(blockWithEvents);
+
+    return blockWithEvents;
   };
 }
