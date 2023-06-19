@@ -25,10 +25,10 @@ const providerFilterId = provider.createFilter({
   address: logSourceAddress,
 });
 
-const gethTxHashMap = new Map<string, boolean>();
-const gethTxRemovedHashMap = new Map<string, boolean>();
-const providerTxHashMap = new Map<string, boolean>();
-const providerRemovedTxHashMap = new Map<string, boolean>();
+const gethTxHashMap = new Map<string, string>();
+const gethTxRemovedHashMap = new Map<string, string>();
+const providerTxHashMap = new Map<string, string>();
+const providerRemovedTxHashMap = new Map<string, string>();
 
 let gethLogCount = 0;
 let providerLogCount = 0;
@@ -57,17 +57,26 @@ while (true) {
 
   gethLogs.forEach((log) => {
     if (log.removed) {
-      gethTxRemovedHashMap.set(log.txHash!, true);
+      gethTxRemovedHashMap.set(
+        `${log.blockNumber}-${log.txHash!}`,
+        log.blockHash!
+      );
     } else {
-      gethTxHashMap.set(log.txHash!, true);
+      gethTxHashMap.set(`${log.blockNumber}-${log.txHash!}`, log.blockHash!);
     }
   });
 
   providerLogs.forEach((log) => {
     if (log.removed) {
-      providerRemovedTxHashMap.set(log.txHash!, true);
+      providerRemovedTxHashMap.set(
+        `${log.blockNumber}-${log.txHash!}`,
+        log.blockHash!
+      );
     } else {
-      providerTxHashMap.set(log.txHash!, true);
+      providerTxHashMap.set(
+        `${log.blockNumber}-${log.txHash!}`,
+        log.blockHash!
+      );
     }
   });
 
