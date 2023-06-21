@@ -148,10 +148,12 @@ export class ReorgFilterProvider {
 
     const prevBlock = this.numberMap.get(Number(block.number) - 1)!;
 
-    prevBlock.events = prevBlock.events.map((event) => ({
-      ...event,
-      removed: true,
-    }));
+    prevBlock.events = prevBlock.events
+      .map((event) => ({
+        ...event,
+        removed: true,
+      }))
+      .reverse();
     this.hashMap.set(prevBlock.hash!, prevBlock);
 
     this.handleEventChanges(prevBlock);
