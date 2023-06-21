@@ -105,10 +105,10 @@ while (true) {
       return gethTxRemovedHashMap.has(txHash);
     });
 
-  saveMap(gethTxHashMap, "./gethTxHashMap.json");
-  saveMap(gethTxRemovedHashMap, "./gethTxRemovedHashMap.json");
-  saveMap(providerTxHashMap, "./providerTxHashMap.json");
-  saveMap(providerRemovedTxHashMap, "./providerRemovedTxHashMap.json");
+  saveMap(gethTxHashMap, "./logs/gethTxHashMap.json");
+  saveMap(gethTxRemovedHashMap, "./logs/gethTxRemovedHashMap.json");
+  saveMap(providerTxHashMap, "./logs/providerTxHashMap.json");
+  saveMap(providerRemovedTxHashMap, "./logs/providerRemovedTxHashMap.json");
 
   let mismatchLength = 0;
 
