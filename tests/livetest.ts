@@ -13,8 +13,11 @@ const client = createPublicClient({
   transport: http(rpcUrl),
 });
 
-const provider = new ReorgFilterProvider(rpcUrl, {
-  address: logSourceAddress,
+const provider = new ReorgFilterProvider({
+  rpcUrl,
+  filters: {
+    address: logSourceAddress,
+  },
 });
 
 const gethFilter = await client.createEventFilter({

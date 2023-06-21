@@ -39,6 +39,12 @@ function filterLogs(allLogs: Log[], filter: Filter) {
   });
 }
 
+interface ReorgFilterProviderProps {
+  rpcUrl: string;
+  filters?: Omit<GetLogsParameters, "fromBlock" | "toBlock">;
+  keepBlocks?: number;
+}
+
 export class ReorgFilterProvider {
   private client;
   public unwatch;
@@ -50,15 +56,14 @@ export class ReorgFilterProvider {
 
   public blockFirst = -1;
   public blockHead = -1;
+  public keepBlocks;
 
   public filterChangesMap: Map<number, { filters?: Filter; newLogs: Log[] }> =
     new Map();
 
-  constructor(
-    rpcUrl: string,
-    filters: Omit<GetLogsParameters, "fromBlock" | "toBlock">
-  ) {
+  constructor({ rpcUrl, filters, keepBlocks }: ReorgFilterProviderProps) {
     this.filters = filters;
+    this.keepBlocks = keepBlocks;
 
     this.client = createPublicClient({
       transport: http(rpcUrl),
@@ -91,6 +96,30 @@ export class ReorgFilterProvider {
 
     return newLogs;
   }
+
+  private purgeBlocks = () => {
+    if (this.keepBlocks === undefined) return;
+
+    if (this.blockHead - this.blockFirst < this.keepBlocks) return;
+
+    const newBlockFirst = this.blockHead - this.keepBlocks;
+
+    for (let i = this.blockFirst; i < newBlockFirst; i++) {
+      const block = this.numberMap.get(i)!;
+      this.numberMap.delete(i);
+      this.hashMap.delete(block.hash!);
+    }
+
+    if (this.numberMap.size !== this.hashMap.size) {
+      for (const blockHash of this.hashMap.keys()) {
+        if (this.hashMap.get(blockHash)!.number! < newBlockFirst) {
+          this.hashMap.delete(blockHash);
+        }
+      }
+    }
+
+    this.blockFirst = newBlockFirst;
+  };
 
   private detectReorg = async (block: Block) => {
     // Shoudldn't happen
@@ -186,6 +215,7 @@ export class ReorgFilterProvider {
     }
 
     this.handleEventChanges(blockWithEvents);
+    this.purgeBlocks();
 
     return blockWithEvents;
   };

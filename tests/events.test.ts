@@ -75,7 +75,7 @@ describe("Reorg tests", function () {
 
   beforeEach(async () => {
     snapshotId = await setState(publicClient, snapshotId);
-    provider = new ReorgFilterProvider(anvilUrl, {});
+    provider = new ReorgFilterProvider({ rpcUrl: anvilUrl });
   });
 
   it("Captures no events on empty blocks", async () => {

@@ -51,7 +51,7 @@ describe("Reorg tests", function () {
 
   beforeEach(async () => {
     snapshotId = await setState(publicClient, snapshotId);
-    provider = new ReorgFilterProvider(anvilUrl, {});
+    provider = new ReorgFilterProvider({ rpcUrl: anvilUrl });
   });
 
   it("Loads 2 blocks when 2 blocks are mined", async () => {
