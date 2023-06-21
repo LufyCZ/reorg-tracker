@@ -30,7 +30,7 @@ function filterLogs(allLogs: Log[], filter: Filter) {
     matches &&=
       !filter.fromBlock || Number(filter.fromBlock) <= Number(log.blockNumber);
     matches &&=
-      !filter.fromBlock || Number(filter.toBlock) >= Number(log.blockNumber);
+      !filter.toBlock || Number(filter.toBlock) >= Number(log.blockNumber);
     matches &&=
       !filter.topics ||
       filter.topics.every((topic, index) => log.topics[index] === topic);
@@ -171,6 +171,7 @@ export class ReorgFilterProvider {
         })
       ) {
         const logs = filters ? filterLogs(block.events, filters) : block.events;
+
         newLogs.push(...logs);
       }
     }

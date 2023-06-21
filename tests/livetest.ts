@@ -20,12 +20,16 @@ const provider = new ReorgFilterProvider({
   },
 });
 
+const startBlock = (await client.getBlockNumber({ maxAge: 0 })) + 2n;
+
 const gethFilter = await client.createEventFilter({
   address: logSourceAddress,
+  fromBlock: startBlock,
 });
 
 const providerFilterId = provider.createFilter({
   address: logSourceAddress,
+  fromBlock: Number(startBlock),
 });
 
 const gethTxHashMap = new Map<string, string>();
